@@ -2,17 +2,19 @@ import json
 import os
 import sseclient
 from urllib.parse import urljoin
-from typing import Union, Generator
-
+from typing import Any, Dict, List, Union, Generator
+import urllib3
 import requests
 
+# 禁用不安全請求警告
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 class MaiAgentHelper:
     def __init__(
         self,
         api_key,
-        base_url='http://ici-rag.nccu.edu.tw:8001/api/v1/',
-        storage_url='https://s3.ap-northeast-1.amazonaws.com/whizchat-media-prod-django.playma.app'
+        base_url='http://140.119.63.98:443/api/v1/',
+        storage_url='https://nccu-ici-rag-minio.jp.ngrok.io/magt-bkt'
     ):
         self.api_key = api_key
         self.base_url = base_url
@@ -21,27 +23,44 @@ class MaiAgentHelper:
     def create_conversation(self, web_chat_id):
         try:
             # 建立 conversation
+            # response = requests.post(
+            #     url=f'{self.base_url}conversations/',
+            #     headers={'Authorization': f'Api-Key {self.api_key}'},
+            #     json={
+            #         'webChat': web_chat_id,
+            #     }
+            # )
             response = requests.post(
                 url=f'{self.base_url}conversations/',
                 headers={'Authorization': f'Api-Key {self.api_key}'},
                 json={
                     'webChat': web_chat_id,
                 },
+                verify=False  # 忽略 SSL 驗證
             )
             response.raise_for_status()
+            return response.json()
         except requests.exceptions.RequestException as e:
-            print(e)
-            print(response.text)
-            print(e)
+            print(f"請求錯誤: {str(e)}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"回應內容: {e.response.text}")
             exit(1)
         except Exception as e:
-            print(e)
-
-        return response.json()
+            print(f"其他錯誤: {str(e)}")
+            exit(1)
 
     def send_message(self, conversation_id, content, attachments=None):
         try:
             # 傳送訊息
+            # response = requests.post(
+            #     url=f'{self.base_url}messages/',
+            #     headers={'Authorization': f'Api-Key {self.api_key}'},
+            #     json={
+            #         'conversation': conversation_id,
+            #         'content': content,
+            #         'attachments': attachments or [],
+            #     }
+            # )
             response = requests.post(
                 url=f'{self.base_url}messages/',
                 headers={'Authorization': f'Api-Key {self.api_key}'},
@@ -50,6 +69,7 @@ class MaiAgentHelper:
                     'content': content,
                     'attachments': attachments or [],
                 },
+                verify=False  # 忽略 SSL 驗證
             )
             response.raise_for_status()
         except requests.exceptions.RequestException as e:
@@ -69,9 +89,14 @@ class MaiAgentHelper:
 
         headers = {'Authorization': f'Api-Key {self.api_key}', 'Content-Type': 'application/json'}
 
-        payload = {'filename': filename, 'modelName': model_name, 'fieldName': field_name, 'fileSize': file_size}
+        payload = {
+            'filename': filename,
+            'fileSize': file_size,
+            'modelName': model_name,
+            'fieldName': field_name
+        }
 
-        response = requests.post(url, headers=headers, data=json.dumps(payload))
+        response = requests.post(url, headers=headers, data=json.dumps(payload), verify=False)  # 忽略 SSL 驗證
 
         response.raise_for_status()
 
@@ -95,7 +120,8 @@ class MaiAgentHelper:
                 'x-amz-signature': upload_data['fields']['x-amz-signature'],
             }
 
-            response = requests.post(self.storage_url, data=data, files=files)
+            # response = requests.post(self.storage_url, data=data, files=files)
+            response = requests.post(self.storage_url, data=data, files=files, verify=False)  # 忽略 SSL 驗證
 
             if response.status_code == 204:
                 print('File uploaded successfully')
@@ -108,10 +134,6 @@ class MaiAgentHelper:
     def update_attachment(self, conversation_id, file_id, original_filename):
         url = f'{self.base_url}conversations/{conversation_id}/attachments/'
 
-        headers = {
-            'Authorization': f'Api-Key {self.api_key}',
-        }
-
         payload = {
             'file': file_id,
             'filename': original_filename,
@@ -119,7 +141,8 @@ class MaiAgentHelper:
         }
 
         try:
-            response = requests.post(url, headers=headers, json=payload)
+            # response = requests.post(url, headers=headers, json=payload)
+            response = requests.post(url, headers=HEADERS, json=payload, verify=False)  # 忽略 SSL 驗證
             response.raise_for_status()
         except requests.exceptions.RequestException as e:
             print(response.text)
@@ -145,7 +168,8 @@ class MaiAgentHelper:
         }
 
         try:
-            response = requests.post(url, headers=headers, json=payload)
+            # response = requests.post(url, headers=headers, json=payload)
+            response = requests.post(url, headers=headers, json=payload, verify=False)  # 忽略 SSL 驗證
             response.raise_for_status()
         except requests.exceptions.RequestException as e:
             print(response.text)
@@ -167,7 +191,8 @@ class MaiAgentHelper:
         payload = {'files': [{'file': file_key, 'filename': original_filename}]}
 
         try:
-            response = requests.post(url, headers=headers, json=payload)
+            # response = requests.post(url, headers=headers, json=payload)
+            response = requests.post(url, headers=headers, json=payload, verify=False)  # 忽略 SSL 驗證
             response.raise_for_status()
         except requests.exceptions.RequestException as e:
             print(response.text)
@@ -177,10 +202,22 @@ class MaiAgentHelper:
             print(e)
             exit(1)
 
+        return response.json()
+
     def upload_batch_qa_file(self, web_chat_id: str, file_key: str, original_filename: str):
         url = f'{self.base_url}web-chats/{web_chat_id}/batch-qas/'
 
         try:
+            # response = requests.post(
+            #     url,
+            #     headers={
+            #         'Authorization': f'Api-Key {self.api_key}',
+            #     },
+            #     json={
+            #         'file': file_key,
+            #         'filename': original_filename,
+            #     }
+            # )
             response = requests.post(
                 url,
                 headers={
@@ -190,6 +227,7 @@ class MaiAgentHelper:
                     'file': file_key,
                     'filename': original_filename,
                 },
+                verify=False  # 忽略 SSL 驗證
             )
             response.raise_for_status()
             print('Successfully uploaded batch QA file')
@@ -211,7 +249,8 @@ class MaiAgentHelper:
             'Authorization': f'Api-Key {self.api_key}',
         }
 
-        response = requests.get(url, headers=headers)
+        # response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, verify=False)  # 忽略 SSL 驗證
 
         if response.status_code == 200:
             content_disposition = response.headers.get('Content-Disposition')
@@ -252,13 +291,38 @@ class MaiAgentHelper:
             'Authorization': f'Api-Key {self.api_key}',
         }
 
-        response = requests.delete(url, headers=headers)
+        try:
+            # response = requests.delete(url, headers=headers)
+            response = requests.delete(url, headers=headers, verify=False)  # 忽略 SSL 驗證
+            response.raise_for_status()
+            print(f'成功刪除知識庫檔案，ID: {file_id}')
+        except requests.exceptions.RequestException as e:
+            print(f"請求錯誤: {str(e)}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"回應內容: {e.response.text}")
+        except Exception as e:
+            print(f"其他錯誤: {str(e)}")
 
-        if response.status_code == 204:
-            print(f'Successfully deleted knowledge with ID: {file_id}')
-        else:
-            print(f'Error: {response.status_code}')
-            print(response.text)
+    def get_conversations(url: str, headers) -> List[Dict[str, Any]]:
+        """
+        從 API 獲取對話列表並返回所有訊息
+        """
+        all_messages = []  # 存放所有訊息的列表
+
+        # while url:
+        response = requests.get(url, headers)
+            # if response.status_code != 200:
+            #     print(response.text)
+            #     print(f"請求失敗，狀態碼: {response.status_code}")
+            #     break
+
+            # data = response.json()
+            # all_messages.extend(data["results"])  # 累積結果
+            # url = data.get("next")  # 更新為下一個請求的 URL
+        
+        data = json.loads(response.text)
+        print(data['results'][1]['content'])
+        return all_messages
 
     def get_inbox_items(self):
         inbox_items = []
@@ -266,23 +330,29 @@ class MaiAgentHelper:
         url = f'{self.base_url}inboxes/'
         while True:
             try:
+                # response = requests.get(
+                #     url=url,
+                #     headers={'Authorization': f'Api-Key {self.api_key}'},
+                # )
                 response = requests.get(
                     url=url,
                     headers={'Authorization': f'Api-Key {self.api_key}'},
+                    verify=False  # 忽略 SSL 驗證
                 )
                 response.raise_for_status()
-                inbox_items.extend(response.json()['results'])
+                data = response.json()
+                inbox_items.extend(data['results'])
+                url = data.get('next')
+                if not url:
+                    break
             except requests.exceptions.RequestException as e:
-                print(response.text)
-                print(e)
+                print(f"請求錯誤: {str(e)}")
+                if hasattr(e, 'response') and e.response is not None:
+                    print(f"回應內容: {e.response.text}")
                 exit(1)
             except Exception as e:
-                print(e)
+                print(f"其他錯誤: {str(e)}")
                 exit(1)
-
-            url = response.json()['next']
-            if url is None:
-                break
 
         return inbox_items
 
@@ -340,21 +410,34 @@ class MaiAgentHelper:
 
     def _handle_non_streaming_completion(self, url: str, headers: dict, payload: dict) -> dict:
         """處理非串流模式的回應"""
+        # response = requests.post(
+        #     url,
+        #     headers=headers,
+        #     json=payload
+        # )
         response = requests.post(
             url,
             headers=headers,
-            json=payload
+            json=payload,
+            verify=False  # 忽略 SSL 驗證
         )
         response.raise_for_status()
         return response.json()
 
     def _handle_streaming_completion(self, url: str, headers: dict, payload: dict) -> Generator:
         """處理串流模式的回應"""
+        # response = requests.post(
+        #     url,
+        #     headers=headers,
+        #     json=payload,
+        #     stream=True
+        # )
         response = requests.post(
             url,
             headers=headers,
             json=payload,
-            stream=True
+            stream=True,
+            verify=False  # 忽略 SSL 驗證
         )
         response.raise_for_status()
         
